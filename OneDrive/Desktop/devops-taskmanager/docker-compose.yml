@@ -1,0 +1,62 @@
+name: taskmgr
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-taskmgr}
+      MYSQL_USER: ${DB_USER:-taskmgr}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD must be set in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      - backend-net
+    healthcheck:
+      # -h 127.0.0.1 forces TCP; the socket answers during init before the real server is ready.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    image: ${DOCKERHUB_USER:-local}/taskmgr-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME:-taskmgr}
+      DB_USER: ${DB_USER:-taskmgr}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend-net
+      - frontend-net
+
+  frontend:
+    image: ${DOCKERHUB_USER:-local}/taskmgr-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "80:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - frontend-net
+
+networks:
+  frontend-net:
+    driver: bridge
+  # internal: no route to the internet and unreachable from the frontend container.
+  backend-net:
+    driver: bridge
+    internal: true
+
+volumes:
+  mysql_data:

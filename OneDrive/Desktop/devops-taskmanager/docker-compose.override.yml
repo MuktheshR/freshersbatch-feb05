@@ -1,0 +1,9 @@
+# Auto-merged by `docker compose` locally; never copied to the server, which only pulls images.
+services:
+  backend:
+    build:
+      context: ./backend
+      target: runtime
+  frontend:
+    build:
+      context: ./frontend
